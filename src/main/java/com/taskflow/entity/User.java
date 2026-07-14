@@ -21,4 +21,8 @@ public class User {
 
     @Column(nullable = false, unique = true)
     private String email;
+
+    @Column(nullable = false)
+    @ToString.Exclude
+    private String password;
 }

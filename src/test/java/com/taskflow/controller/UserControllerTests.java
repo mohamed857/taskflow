@@ -1,5 +1,6 @@
 package com.taskflow.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.taskflow.dto.UserRequest;
 import com.taskflow.dto.UserResponse;
 import com.taskflow.service.UserService;
@@ -8,9 +9,11 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,22 +21,24 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 
-
 @WebMvcTest(UserController.class)
 public class UserControllerTests {
+    @MockitoBean
+    private PasswordEncoder passwordEncoder;
     @Autowired
     private MockMvc mockMvc;    // أداة عشان نبعت Request وهمي للـ API
 
     @Autowired
-    private ObjectMapper objectMapper;  // لتحويل الـ Java Object لـ JSON
+    private JsonMapper objectMapper;  // لتحويل الـ Java Object لـ JSON
 
     @MockitoBean
     private UserService userService; // نعمل Mock للـ Service عشان نعزل الاختبار
 
     @Test
+    @WithMockUser
     void shouldCreateUserAndReturn201() throws Exception{
         // 1. Prepare
-        UserRequest request = new UserRequest("ahmed","ahmed@test.com");
+        UserRequest request = new UserRequest("ahmed","ahmed@test.com","123");
 
         Mockito.when(userService.createUser(any(UserRequest.class)))
                 .thenReturn(new UserResponse(1L,"ahmed","ahmed@test.com"));
@@ -47,9 +52,10 @@ public class UserControllerTests {
     }
 
     @Test
+    @WithMockUser
     void shouldReturn400WhenEmailIsInvalid() throws Exception {
         // 1. Prepare (إيميل غلط عمداً)
-        UserRequest request = new UserRequest("ahmed", "invalid-email");
+        UserRequest request = new UserRequest("ahmed", "invalid-email","123");
 
         // 2. Action & Assert
         mockMvc.perform(post("/api/users")
