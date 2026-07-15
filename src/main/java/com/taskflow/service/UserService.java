@@ -1,5 +1,6 @@
 package com.taskflow.service;
 
+import com.taskflow.annotation.LogExecutionTime;
 import com.taskflow.dto.UserRequest;
 import com.taskflow.dto.UserResponse;
 import com.taskflow.entity.User;
@@ -17,6 +18,8 @@ public class UserService {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
     }
+
+    @LogExecutionTime
     public UserResponse createUser(UserRequest req){
         if(userRepository.existsByEmail(req.email())){
             throw new UserAlreadyExistsException("User with email " + req.email() + " already exists");
