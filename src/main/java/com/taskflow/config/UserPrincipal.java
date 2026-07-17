@@ -6,10 +6,11 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.io.Serializable;
 import java.util.Collection;
 import java.util.List;
 
-public class UserPrincipal implements UserDetails {
+public class UserPrincipal implements UserDetails , Serializable {
     private final User user;
 
     public UserPrincipal(User user) {
@@ -17,6 +18,9 @@ public class UserPrincipal implements UserDetails {
     }
     public Long getId(){
         return user.getId();
+    }
+    public String getEmail(){
+        return user.getEmail();
     }
 
     @Override
@@ -33,7 +37,7 @@ public class UserPrincipal implements UserDetails {
 
     @Override
     public String getUsername() {
-        return user.getEmail();
+        return user.getUsername();
     }
 
     @Override
