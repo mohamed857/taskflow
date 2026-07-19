@@ -36,9 +36,17 @@ public class AuthController {
     }
     @PostMapping("/login")
     public ResponseEntity<Map<String,String>> login(@RequestBody UserRequest request){
-        authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email(),request.password()));
-        String token = jweService.generateToken(request.email());
-        return ResponseEntity.ok(Map.of("token",token));
+        try {
+            // بنحاول نعمل التحقق
+            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email(),request.password()));
+            String token = jweService.generateToken(request.email());
+            return ResponseEntity.ok(Map.of("token",token));
+
+        } catch (org.springframework.security.core.AuthenticationException e) {
+            // لوحصل أي خطأ أمان (باسوورد غلط أو يوزر مش موجود)، نمسكه هنا
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(Map.of("error", "Invalid email or password"));
+        }
     }
 
 }

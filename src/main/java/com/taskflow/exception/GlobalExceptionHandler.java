@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import javax.naming.AuthenticationException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -39,11 +40,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(errors);
     }
 
-    @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<Map<String, String>> handleBadCredentials(BadCredentialsException ex) {
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<Map<String, String>> handleAuthenticationException(AuthenticationException  ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body(Map.of("error", "Invalid email or password"));
     }
+
+//    @ExceptionHandler(BadCredentialsException.class)
+//    public ResponseEntity<Map<String, String>> handleBadCredentials(BadCredentialsException ex) {
+//        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+//                .body(Map.of("error", "Invalid email or password"));
+//    }
 
 
 }
