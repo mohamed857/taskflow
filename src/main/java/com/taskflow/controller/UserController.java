@@ -3,10 +3,13 @@ package com.taskflow.controller;
 import com.taskflow.config.UserPrincipal;
 import com.taskflow.dto.UserResponse;
 import com.taskflow.service.UserService;
+import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RequestMapping("/api/users")
 @RestController
@@ -26,5 +29,11 @@ public class UserController {
         String email = userPrincipal.getEmail();
 
         return ResponseEntity.ok(new UserResponse(userId, username, email));
+    }
+    @GetMapping
+    @Operation(summary = "Get all users (Useful for assigning tasks)")
+    public ResponseEntity<List<UserResponse>> getAllUsers() {
+        List<UserResponse> users = userService.getAllUsers(); // هنعمل الدالة دي تحت
+        return ResponseEntity.ok(users);
     }
 }

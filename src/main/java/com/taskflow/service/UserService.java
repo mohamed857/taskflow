@@ -9,6 +9,9 @@ import com.taskflow.repository.UserRepository;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Service
 public class UserService {
     private final UserRepository userRepository;
@@ -31,5 +34,11 @@ public class UserService {
                 .build();
         User savedUser= userRepository.save(user);
         return new UserResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail());
+    }
+
+    public List<UserResponse> getAllUsers() {
+        return userRepository.findAll().stream()
+                .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail()))
+                .collect(Collectors.toList());
     }
 }
