@@ -1,4 +1,6 @@
 package com.taskflow.dto;
 
-public record UserResponse(Long id, String username, String email) {
+import com.taskflow.entity.Roles;
+
+public record UserResponse(Long id, String username, String email, String role) {
 }

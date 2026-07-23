@@ -1,11 +1,13 @@
-# 🚀 TaskFlow — Production-Ready Task Management API
+# 🚀 TaskFlow — Advanced Jira-like Task Management System
 
-A stateless, JWT-secured Task Management System (Jira/Trello-style backend) built to demonstrate a modern, production-grade Spring Boot architecture.
+A production-ready, highly scalable Task Management System built from scratch to demonstrate core and advanced Spring Boot patterns: **Role-Based Access Control**, **task delegation**, **JWT security**, **caching**, **auditing**, **AOP**, and **background scheduling**.
 
 ![Java](https://img.shields.io/badge/Java-21-orange)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0-brightgreen)
+![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1.0--SNAPSHOT-brightgreen)
+![Spring Security](https://img.shields.io/badge/Spring%20Security-6-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-blue)
 ![Redis](https://img.shields.io/badge/Redis-Caching-red)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 ---
@@ -14,26 +16,19 @@ A stateless, JWT-secured Task Management System (Jira/Trello-style backend) buil
 
 - [Overview](#overview)
 - [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [Features](#features)
-- [Project Structure](#project-structure)
+- [Core & Advanced Features](#core--advanced-features)
+- [API Reference & RBAC Matrix](#api-reference--rbac-matrix)
+- [Database Schema](#database-schema)
 - [Getting Started](#getting-started)
-- [Configuration](#configuration)
-- [API Reference](#api-reference)
-- [Authentication Flow](#authentication-flow)
-- [Error Handling](#error-handling)
-- [Background Jobs](#background-jobs)
-- [Testing](#testing)
-- [Known Issues & Notes](#known-issues--notes)
-- [Roadmap](#roadmap)
+- [API Documentation (Swagger UI)](#api-documentation-swagger-ui)
+- [Running Tests](#running-tests)
+- [System Design Notes](#system-design-notes)
 
 ---
 
 ## Overview
 
-TaskFlow is a layered, stateless REST API for managing users and tasks. It focuses on demonstrating correct, idiomatic use of the Spring ecosystem — security, caching, auditing, AOP, and scheduling — rather than being a toy CRUD app.
-
-Every user authenticates via JWT; every task belongs to exactly one user; overdue tasks are detected and flagged automatically by a background scheduler.
+TaskFlow is a stateless, JWT-secured REST API for managing tasks across a team, modeled after Jira's permission and delegation patterns. Every task has a **reporter** (who created it) and an **assignee** (who's responsible for it), and every action is gated by role: `ADMIN`, `MANAGER`, or `USER`. A background scheduler sweeps the database every 60 seconds to flag overdue tasks automatically.
 
 ---
 
@@ -42,339 +37,174 @@ Every user authenticates via JWT; every task belongs to exactly one user; overdu
 | Layer | Technology |
 |---|---|
 | Language | Java 21 (Records, Pattern Matching) |
-| Framework | Spring Boot 4.1.0 |
-| Security | Spring Security 7 + Stateless JWT (JJWT 0.12.x) |
+| Framework | Spring Boot 4.1.0-SNAPSHOT / Spring Framework 7 |
+| Security | Spring Security 6 + Stateless JWT |
 | Persistence | Spring Data JPA + PostgreSQL |
-| Caching | Spring Data Redis (`@Cacheable`) |
-| API Docs | springdoc-openapi 2.8.5 (Swagger UI) |
-| AOP | Spring AOP (`@Aspect`, custom `@LogExecutionTime`) |
-| Scheduling | Spring `@Scheduled` |
-| Build Tool | Maven |
+| Caching | Redis (Spring Data Redis) |
+| API Docs | SpringDoc OpenAPI 3 (Swagger UI, Jackson 3 compatible) |
 | Testing | JUnit 5, Mockito, MockMvc, Testcontainers |
+| Build Tool | Maven |
+| Containerization | Docker & Docker Compose (multi-stage build) |
 
-> **Note:** This project tracks Spring Boot 4.x. Because the ecosystem around Boot 4 is still maturing, third-party library versions (like springdoc) are pinned deliberately — see [Known Issues & Notes](#known-issues--notes) before upgrading any dependency.
-
----
-
-## Architecture
-
-```
-Client
-  │
-  ▼
-JwtAuthenticationFilter  ──► validates Bearer token, populates SecurityContext
-  │
-  ▼
-Controller Layer   (REST endpoints, request validation)
-  │
-  ▼
-Service Layer      (business logic, @LogExecutionTime via AOP)
-  │
-  ▼
-Repository Layer   (Spring Data JPA)
-  │
-  ▼
-PostgreSQL              Redis (cache-aside for UserDetails)
-```
-
-**Cross-cutting concerns:**
-- **AOP** (`LoggingAspect`) wraps any method annotated `@LogExecutionTime` and logs its duration — zero impact on business logic readability.
-- **Auditing** (`AuditorAwareConfig`) automatically stamps `createdBy` / `updatedBy` on entities using the authenticated principal's email, falling back to `"SYSTEM"` for unauthenticated contexts (e.g. the scheduler).
-- **Scheduling** (`TaskScheduler`) runs independently of the request/response cycle, sweeping the database every 60 seconds.
+> **Note:** This project tracks a Spring Boot 4.1.0 **snapshot**. Expect third-party library compatibility (SpringDoc, JJWT, Testcontainers) to need re-verification on every Boot upgrade.
 
 ---
 
-## Features
+## Core & Advanced Features
 
-### 1. Authentication & Security
-- Fully **stateless** — no HTTP sessions, `SessionCreationPolicy.STATELESS`.
-- Custom `JwtAuthenticationFilter` (`OncePerRequestFilter`) validates the `Authorization: Bearer <token>` header on every request.
-- Custom `JwtAuthenticationEntryPoint` returns structured JSON on `401 Unauthorized` (instead of the default HTML error page), including a specific `auth_error` reason when available.
-- Passwords hashed with `BCryptPasswordEncoder`.
-- `UserPrincipal` implements `UserDetails` and wraps the `User` entity — the security context exposes `id`, `email`, and `username` directly, avoiding a DB round-trip in controllers.
+### 1. Enterprise Security & RBAC
+A strict, Jira-like permission system enforced with `@PreAuthorize`:
 
-### 2. Caching
-- `CustomUserDetailsService.loadUserByUsername` is annotated `@Cacheable(value = "users", key = "#email")`, so repeated authentications (e.g. every request carrying a JWT) skip the database after the first lookup.
-- Backed by Redis via `spring.cache.type=redis`.
-- **Requires Redis to be running** — if Redis is unreachable, Spring wraps the resulting exception as `InternalAuthenticationServiceException`, which is now handled generically (see [Error Handling](#error-handling)).
+| Role | Permissions |
+|---|---|
+| `ADMIN` | Full system access — create, read, update, delete any task |
+| `MANAGER` | Create tasks, assign them, manage any task in the system |
+| `USER` | View only tasks assigned to or created by them; can update **status only**, via a dedicated `PATCH` endpoint |
 
-### 3. Auditing
-- `@EnableJpaAuditing` + `AuditorAware<String>` bean automatically populates `createdAt`, `updatedAt`, `createdBy`, `updatedBy` on every entity implementing the auditing annotations — no manual timestamp/user tracking in service code.
+### 2. Task Delegation — Reporter vs. Assignee
+- **Reporter**: the user who created the task (immutable relationship).
+- **Assignee**: the user responsible for completing it (mutable — can be reassigned).
+- Custom JPA queries (`findByIdAndReporterIdOrAssigneeId`) enforce secure data-access boundaries so users can only reach tasks they're actually party to.
 
-### 4. AOP — Execution Time Logging
-- Custom `@LogExecutionTime` annotation + `@Around` advice in `LoggingAspect` measures and logs method execution time in milliseconds for any annotated service method.
+### 3. Modern Java Constructs
+- **Records** for all DTOs (`UserRequest`, `TaskResponse`, `TaskUpdateRequest`) — no boilerplate getters/setters.
+- **Enums** for `Role` (`ADMIN`, `MANAGER`, `USER`) and `TaskStatus` (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `OVERDUE`).
 
-### 5. Background Scheduling
-- `TaskScheduler.checkForOverdueTask()` runs every 60 seconds (`fixedRate = 60000`), bulk-updating any `PENDING` task whose `dueDate` has passed to `OVERDUE` via a single `@Modifying` JPQL query — no N+1 entity loading.
+### 4. Spring Data JPA & Auditing
+- **Entity auditing**: `createdAt`, `updatedAt`, `createdBy`, `updatedBy` populated automatically via a custom `AuditorAware` that reads the user from the JWT security context.
+- **Custom queries**: `@Modifying` bulk updates for overdue tasks — no N+1 entity loading.
+- **Performance**: `FetchType.LAZY` on all entity relationships.
 
-### 6. Validation & Error Handling
-- Jakarta Bean Validation (`@NotBlank`, `@Email`) on all request DTOs.
-- Centralized `@RestControllerAdvice` (`GlobalExceptionHandler`) normalizes all error responses to consistent JSON shapes.
+### 5. Stateless JWT Architecture
+- Tokens embed the user's **email** and **role** in their claims.
+- `JwtAuthenticationFilter` extracts roles from the token and builds `GrantedAuthority`s dynamically (e.g. `ROLE_ADMIN`).
+- `JwtAuthenticationEntryPoint` returns structured JSON on `401 Unauthorized` instead of the default HTML error page.
 
-### 7. API Documentation
-- Swagger UI via springdoc-openapi, with a `bearerAuth` HTTP security scheme configured so JWTs can be tested directly from the "Authorize" button.
+### 6. Performance & Caching (Redis)
+- `RedisCacheManager` configured for the app.
+- `@Cacheable` on `loadUserByUsername`, so repeated token validations skip PostgreSQL after the first lookup.
+
+### 7. Aspect-Oriented Programming (AOP)
+- Custom `@LogExecutionTime` annotation.
+- `@Around` advice measures and logs method execution time in milliseconds — zero impact on business-logic readability.
+
+### 8. Background Processing (Scheduling)
+- `@EnableScheduling` + a `@Scheduled` job running every 60 seconds.
+- Automatically finds tasks past their `dueDate` and flips their status to `OVERDUE` in bulk.
+
+### 9. Global Exception Handling
+- `@RestControllerAdvice` normalizes `ValidationException`, `DataIntegrityViolationException`, `BadCredentialsException`, and a custom `ResourceNotFoundException` into consistent JSON error responses.
+
+### 10. Testing Strategy
+- `@WebMvcTest` — isolated controller tests with `MockMvc`, no full application context.
+- **Testcontainers** — spins up a real PostgreSQL instance in Docker for `UserRepositoryTests`, then tears it down automatically.
 
 ---
 
-## Project Structure
+## API Reference & RBAC Matrix
 
-```
-com.taskflow
-├── TaskflowApplication.java
-├── annotation/
-│   └── LogExecutionTime.java
-├── config/
-│   ├── SecurityConfig.java
-│   ├── JwtService.java
-│   ├── JwtAuthenticationFilter.java
-│   ├── JwtAuthenticationEntryPoint.java
-│   ├── CustomUserDetailsService.java
-│   ├── UserPrincipal.java
-│   ├── AuditorAwareConfig.java
-│   ├── AuditConfig.java
-│   ├── LoggingAspect.java
-│   └── OpenApiConfig.java
-├── controller/
-│   ├── AuthController.java
-│   ├── UserController.java
-│   └── TaskController.java
-├── service/
-│   ├── UserService.java
-│   └── TaskService.java
-├── repository/
-│   ├── UserRepository.java
-│   └── TaskRepository.java
-├── entity/
-│   ├── User.java
-│   └── Task.java
-├── dto/
-│   ├── UserRequest.java / UserResponse.java
-│   └── TaskRequest.java / TaskResponse.java
-├── exception/
-│   ├── UserAlreadyExistsException.java
-│   └── GlobalExceptionHandler.java
-└── scheduler/
-    └── TaskScheduler.java
-```
+### Auth
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/auth/register` | Public | Register a new user (defaults to `USER` role) |
+| `POST` | `/api/auth/login` | Public | Authenticate and receive a JWT + role |
+
+### Users
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/users/me` | Authenticated | Get the current user's profile |
+| `GET` | `/api/users` | Authenticated | List all users (for assigning tasks) |
+
+### Tasks
+
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `POST` | `/api/tasks` | `ADMIN`, `MANAGER` | Create a new task and assign it |
+| `GET` | `/api/tasks/all` | `ADMIN`, `MANAGER` | View every task in the system |
+| `GET` | `/api/tasks` | Authenticated | Get tasks created by me |
+| `GET` | `/api/tasks?assigned=true` | Authenticated | Get tasks assigned to me |
+| `GET` | `/api/tasks/{id}` | Creator / Assignee | Get details for a specific task |
+| `PUT` | `/api/tasks/{id}` | `ADMIN`, `MANAGER` | Fully or partially update a task |
+| `PATCH` | `/api/tasks/{id}/status` | Creator / Assignee | Update task status only (for day-to-day use) |
+| `DELETE` | `/api/tasks/{id}` | `ADMIN`, `MANAGER` | Permanently delete a task |
+
+---
+
+## Database Schema
+
+**`users`**
+`id`, `username`, `email`, `password`, `role` (enum), `created_at`, `updated_at`, `created_by`, `updated_by`
+
+**`tasks`**
+`id`, `title`, `description`, `due_date`, `status` (enum), `reporter_id` (FK), `assignee_id` (FK), `created_at`
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
-- JDK 21+
-- Maven
-- Docker (for Redis)
-- PostgreSQL running locally, with a database named `taskflow_db`
+- JDK 21
+- Docker running
+- *(Optional)* PostgreSQL running locally, if you prefer running via an IDE instead of Docker
 
 ### 1. Clone the repo
 ```bash
-git clone https://github.com/mohamed857/taskflow.git
+git clone https://github.com/YOUR_USERNAME/taskflow.git
 cd taskflow
 ```
 
-### 2. Start Redis
-```bash
-docker run -d --name taskflow-redis -p 6379:6379 redis:alpine
-```
+### 2. Run via Docker (recommended)
 
-### 3. Configure environment variables
-
-Rather than hardcoding secrets in `application.properties`, export these before running the app:
+Spins up the entire stack — app, PostgreSQL, and Redis — in one command:
 
 ```bash
-export DB_PASSWORD=your_postgres_password
-export JWT_SECRET=$(openssl rand -base64 32)
+docker-compose up --build
 ```
 
-See [Configuration](#configuration) for the corresponding `application.properties` setup.
+The app will be available at `http://localhost:8080`.
 
-### 4. Run
-```bash
-mvn spring-boot:run
-```
+### 3. Run via IDE (IntelliJ / Eclipse)
 
-### 5. Explore the API
-- Swagger UI: `http://localhost:8080/swagger-ui.html`
-- OpenAPI spec (JSON): `http://localhost:8080/v3/api-docs`
+If you'd rather run the backend locally for debugging:
+
+1. Start Redis: `docker run -d --name taskflow-redis -p 6379:6379 redis:alpine`
+2. Update `src/main/resources/application.properties` with your local PostgreSQL credentials.
+3. Run `TaskflowApplication.java`.
 
 ---
 
-## Configuration
+## API Documentation (Swagger UI)
 
-`src/main/resources/application.properties`:
+Once the app is running, the interactive API docs are available at:
 
-```properties
-spring.application.name=TaskFlow
-
-# Database
-spring.datasource.url=jdbc:postgresql://localhost:5432/taskflow_db
-spring.datasource.username=postgres
-spring.datasource.password=${DB_PASSWORD}
-
-# JPA
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.format_sql=true
-
-# Redis
-spring.data.redis.host=localhost
-spring.data.redis.port=6379
-spring.redis.timeout=2000ms
-spring.cache.type=redis
-
-# JWT
-jwt.secret=${JWT_SECRET}
-jwt.expiration=86400000
+```
+http://localhost:8080/swagger-ui.html
 ```
 
-> ⚠️ **Do not commit real secrets.** Add `application.properties` (or a `.env` file, if you switch to `spring-dotenv`) to `.gitignore` if it ever contains real credentials. Use environment variables or a secrets manager in any shared/production environment.
+1. Register a user via `/api/auth/register`.
+2. Log in via `/api/auth/login` and copy the returned token.
+3. Click **Authorize** at the top of the Swagger page.
+4. Enter `Bearer <your_token>` and confirm.
+5. Test any secured endpoint directly from the UI.
 
 ---
 
-## API Reference
-
-### Auth
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|:---:|---|
-| `POST` | `/api/auth/register` | ❌ | Create a new user account |
-| `POST` | `/api/auth/login` | ❌ | Authenticate and receive a JWT |
-
-**Register**
-```json
-POST /api/auth/register
-{
-  "username": "mohamed",
-  "email": "mohamed@example.com",
-  "password": "SecurePass123"
-}
-```
-
-**Login**
-```json
-POST /api/auth/login
-{
-  "email": "mohamed@example.com",
-  "password": "SecurePass123"
-}
-```
-```json
-// 200 OK
-{ "token": "eyJhbGciOiJIUzI1NiJ9..." }
-```
-
-### Users
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|:---:|---|
-| `GET` | `/api/users/me` | ✅ | Get the currently authenticated user |
-
-### Tasks
-
-| Method | Endpoint | Auth Required | Description |
-|---|---|:---:|---|
-| `POST` | `/api/tasks` | ✅ | Create a task for the authenticated user |
-
-**Create Task**
-```json
-POST /api/tasks
-Authorization: Bearer <token>
-
-{
-  "title": "Finish the README",
-  "description": "Write strong documentation",
-  "dueDate": "2026-07-20T10:00:00"
-}
-```
-```json
-// 201 Created
-{
-  "id": 1,
-  "title": "Finish the README",
-  "description": "Write strong documentation",
-  "dueTime": "2026-07-20T10:00:00",
-  "status": "PENDING"
-}
-```
-
-> Set `dueDate` in the past to watch the scheduler flip the status to `OVERDUE` within 60 seconds.
-
----
-
-## Authentication Flow
-
-1. Client calls `POST /api/auth/register` → user is persisted with a BCrypt-hashed password.
-2. Client calls `POST /api/auth/login` → `AuthenticationManager` delegates to `DaoAuthenticationProvider`, which loads the user via `CustomUserDetailsService` (Redis-cached) and verifies the password.
-3. On success, `JwtService` issues a signed JWT (`HS256`, configurable expiration).
-4. Client stores the token and sends it as `Authorization: Bearer <token>` on every subsequent request.
-5. `JwtAuthenticationFilter` intercepts the request, validates the signature/expiry, loads the user, and populates the `SecurityContext` — no session, no server-side state.
-6. Downstream controllers access the authenticated user via `@AuthenticationPrincipal UserPrincipal`.
-
-```
-Register ──► Login ──► JWT issued ──► Bearer <token> on every request ──► Filter validates ──► SecurityContext set
-```
-
----
-
-## Error Handling
-
-All errors are normalized to JSON by `GlobalExceptionHandler`:
-
-| Exception | HTTP Status | Notes |
-|---|:---:|---|
-| `UserAlreadyExistsException` | 409 Conflict | Duplicate email on register |
-| `DataIntegrityViolationException` | 409 Conflict | DB-level uniqueness violation |
-| `MethodArgumentNotValidException` | 400 Bad Request | Field-level validation errors, keyed by field name |
-| `AuthenticationException` (and subtypes, e.g. `BadCredentialsException`, `InternalAuthenticationServiceException`) | 401 Unauthorized | Covers bad credentials **and** infrastructure failures during authentication (e.g. Redis unreachable) |
-
-Any exception **not** caught by `GlobalExceptionHandler` and thrown from within the security filter chain is instead formatted by `JwtAuthenticationEntryPoint`, which returns:
-
-```json
-{
-  "timestamp": "2026-07-19T09:13:15.259Z",
-  "status": 401,
-  "error": "Unauthorized",
-  "message": "Missing or invalid authentication token",
-  "path": "/api/auth/login"
-}
-```
-
----
-
-## Background Jobs
-
-| Job | Trigger | Behavior |
-|---|---|---|
-| `TaskScheduler.checkForOverdueTask()` | Every 60s (`fixedRate`) | Bulk-updates all `PENDING` tasks with `dueDate < now()` to `OVERDUE` in a single transactional query; logs a warning with the count of affected rows |
-
----
-
-## Testing
+## Running Tests
 
 ```bash
 mvn test
 ```
 
-- `@WebMvcTest` — isolated controller tests with `MockMvc`, no full context or DB.
-- `Testcontainers` — spins up a real PostgreSQL container for repository-level tests, torn down automatically afterward.
-- `@MockBean` — mocks `UserService` / `PasswordEncoder` in web-layer tests.
+> `UserRepositoryTests` automatically spins up a PostgreSQL container via Testcontainers, runs against a real database, and tears the container down afterward.
 
 ---
 
-## Known Issues & Notes
+## System Design Notes
 
-- **Spring Boot 4.1.0 is a fast-moving target.** Because this project tracks Boot 4 directly, third-party library compatibility (springdoc, JJWT, Testcontainers, etc.) must be re-verified on every Boot upgrade. If you bump `spring-boot-starter-parent`, re-check springdoc's compatibility matrix before assuming Swagger will still work.
-- **Redis is a hard dependency at login time**, not just a performance optimization — because `loadUserByUsername` is `@Cacheable`, a Redis outage currently surfaces as an authentication failure rather than a silent cache-miss fallback to the DB. If you want login to degrade gracefully when Redis is down, consider setting `spring.cache.redis.cache-null-values=false` and wrapping the cache lookup with a fallback, or switching to a resilient `CacheErrorHandler`.
-- **JWT secret must be a fixed, externally-supplied value** (`jwt.secret`) — never generate it at startup, or every restart invalidates all previously issued tokens.
+**Why no `@OneToMany` on the `User` entity?**
+To avoid N+1 queries and infinite JSON recursion, task relationships are unidirectional: tasks know their reporter and assignee, but `User` doesn't hold a list of tasks. Tasks are fetched via `TaskRepository` whenever needed.
 
----
-
-## Roadmap
-
-- [ ] Role-based authorization (currently every user is `ROLE_USER`)
-- [ ] Task update / delete endpoints
-- [ ] Pagination on task listing
-- [ ] Refresh tokens
-- [ ] Rate limiting on `/api/auth/**`
-- [ ] Dockerize the full stack (`docker-compose.yml` for app + Postgres + Redis)
+**Why no `CascadeType.ALL` on tasks?**
+In an enterprise system, deleting a user should never cascade-delete the tasks they reported. Data integrity here is enforced through database constraints and explicit logic — not JPA cascades.

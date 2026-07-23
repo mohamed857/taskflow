@@ -33,12 +33,12 @@ public class UserService {
                 .password(passwordEncoder.encode(req.password()))
                 .build();
         User savedUser= userRepository.save(user);
-        return new UserResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail());
+        return new UserResponse(savedUser.getId(), savedUser.getUsername(), savedUser.getEmail(),savedUser.getRole().toString());
     }
 
     public List<UserResponse> getAllUsers() {
         return userRepository.findAll().stream()
-                .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail()))
+                .map(u -> new UserResponse(u.getId(), u.getUsername(), u.getEmail(),u.getRole().toString()))
                 .collect(Collectors.toList());
     }
 }

@@ -26,13 +26,14 @@ public class UserController {
         Long userId = userPrincipal.getId();
         String username = userPrincipal.getUsername();
         String email = userPrincipal.getEmail();
+        String role = userPrincipal.getRole();
 
-        return ResponseEntity.ok(new UserResponse(userId, username, email));
+        return ResponseEntity.ok(new UserResponse(userId, username, email,role));
     }
     @GetMapping
     @Operation(summary = "Get all users (Useful for assigning tasks)")
     public ResponseEntity<List<UserResponse>> getAllUsers() {
-        List<UserResponse> users = userService.getAllUsers(); // هنعمل الدالة دي تحت
+        List<UserResponse> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
     }
 }
