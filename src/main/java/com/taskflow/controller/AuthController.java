@@ -1,6 +1,7 @@
 package com.taskflow.controller;
 
 import com.taskflow.config.JwtService;
+import com.taskflow.config.UserPrincipal;
 import com.taskflow.dto.UserRequest;
 import com.taskflow.dto.UserResponse;
 import com.taskflow.service.UserService;
@@ -19,12 +20,12 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
     private final UserService userService;
-    private final JwtService jweService;
+    private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
 
     public AuthController(UserService userService, JwtService jweService, AuthenticationManager authenticationManager) {
         this.userService = userService;
-        this.jweService = jweService;
+        this.jwtService = jweService;
         this.authenticationManager = authenticationManager;
     }
 
@@ -36,17 +37,12 @@ public class AuthController {
     }
     @PostMapping("/login")
     public ResponseEntity<Map<String,String>> login(@RequestBody UserRequest request){
-        try {
-            // بنحاول نعمل التحقق
-            authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email(),request.password()));
-            String token = jweService.generateToken(request.email());
-            return ResponseEntity.ok(Map.of("token",token));
+            var authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(request.email(),request.password()));
 
-        } catch (org.springframework.security.core.AuthenticationException e) {
-            // لوحصل أي خطأ أمان (باسوورد غلط أو يوزر مش موجود)، نمسكه هنا
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("error", "Invalid email or password"));
-        }
+            UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+            String role = principal.getRole();
+            String token = jwtService.generateToken(request.email(), role);
+            return ResponseEntity.ok(Map.of("token",token,  "role", role));
     }
 
 }

@@ -9,15 +9,18 @@ public record TaskResponse(
         String title,
         String description,
         LocalDateTime dueTime,
-        Task.TaskStatus status
+        Task.TaskStatus status,
+        String assignedTo
 ) {
     public static TaskResponse fromEntity(Task task){
+        String assigneeName= (task.getAssignee() != null)? task.getAssignee().getUsername(): null;
         return new TaskResponse(
                 task.getId(),
                 task.getTitle(),
                 task.getDescription(),
                 task.getDueDate(),
-                task.getStatus()
+                task.getStatus(),
+                assigneeName
                 );
     }
 }

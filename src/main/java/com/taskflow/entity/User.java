@@ -10,8 +10,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+//import java.util.ArrayList;
+//import java.util.List;
 
 @Entity
 @Table(name = "users")
@@ -37,6 +37,11 @@ public class User implements Serializable {
     @ToString.Exclude
     private String password;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private Roles role = Roles.USER;
+
     @CreatedDate
     @Column(updatable = false)
     private LocalDateTime createAt;
@@ -51,6 +56,12 @@ public class User implements Serializable {
     @LastModifiedBy
     private String updatedBy;
 
-    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL)
-    private List<Task> tasks =new ArrayList<>();
+//    @OneToMany(mappedBy = "reporter", cascade = CascadeType.ALL)
+//    @Builder.Default
+//    private List<Task> reportedTasks =new ArrayList<>();
+
+//    @OneToMany(mappedBy = "assignee", cascade = CascadeType.ALL)
+//    @Builder.Default
+//    private List<Task> assignedTasks =new ArrayList<>();
+
 }

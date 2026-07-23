@@ -10,6 +10,7 @@ public record TaskRequest(
         String title,
         String description,
         @NotNull(message = "Due date is required")
-        LocalDateTime dueDate
+        LocalDateTime dueDate,
+        Long assigneeId
 ) {
 }

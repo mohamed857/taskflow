@@ -23,7 +23,6 @@ public class UserController {
     }
     @GetMapping("/me")
     public ResponseEntity<UserResponse> getCurrentUser(@AuthenticationPrincipal UserPrincipal userPrincipal) {
-        // سحر! جبنا الـ ID من غير ما نروح الداتا بيز!
         Long userId = userPrincipal.getId();
         String username = userPrincipal.getUsername();
         String email = userPrincipal.getEmail();

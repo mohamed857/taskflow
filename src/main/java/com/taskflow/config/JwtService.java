@@ -12,8 +12,9 @@ import java.util.Date;
 public class JwtService {
     private static final Key SECRE_KEY= Jwts.SIG.HS256.key().build();
     private static final Long EXPIRATION_TIME= 86400000L;
-    public String generateToken(String username){
+    public String generateToken(String username,String role){
         return Jwts.builder()
+                .claim("role", role)
                 .subject(username)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis()+EXPIRATION_TIME))
@@ -28,6 +29,14 @@ public class JwtService {
                 .parseSignedClaims(token)
                 .getPayload()
                 .getSubject();
+    }
+    public String extractRole(String token){
+        return Jwts.parser()
+                .verifyWith((SecretKey) SECRE_KEY)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .get("role", String.class);
     }
 
     public  boolean isTokenValid(String token){

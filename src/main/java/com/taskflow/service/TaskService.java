@@ -9,6 +9,7 @@ import com.taskflow.entity.User;
 import com.taskflow.exception.ResourceNotFoundException;
 import com.taskflow.repository.TaskRepository;
 import com.taskflow.repository.UserRepository;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,38 +28,49 @@ public class TaskService {
 
     @LogExecutionTime
     public TaskResponse createTask(TaskRequest request, Long userId){
-        // 1. نجيب الـ User من الداتا بيز عشان نربطه بالمهمة (JPA محتاج الـ Entity)
-        User user = userRepository.findById(userId)
+        User reporter = userRepository.findById(userId)
                 .orElseThrow(()->new ResourceNotFoundException("User not found"));
+
+        User assignee = (request.assigneeId() != null)
+                ? userRepository.findById(request.assigneeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Assignee user not found"))
+                : reporter;
 
         Task task = Task.builder()
                 .title(request.title())
                 .description(request.description())
                 .dueDate(request.dueDate())
-                .user(user)
+                .reporter(reporter)
+                .assignee(assignee)
                 .status(Task.TaskStatus.PENDING)
                 .build();
-        Task savedTask = taskRepository.save(task);
-        return TaskResponse.fromEntity(savedTask);
+
+        return TaskResponse.fromEntity(taskRepository.save(task));
     }
     @LogExecutionTime
     public List<TaskResponse> getAllTasks(){
         return taskRepository.findAll().stream().map(TaskResponse::fromEntity).collect(Collectors.toList());
     }
     @LogExecutionTime
-    public List<TaskResponse> getUserTasks(Long userId){
-        return taskRepository.findByUserIdOrderByCreatedAtDesc(userId).stream().map(TaskResponse::fromEntity).collect(Collectors.toList());
+    public List<TaskResponse> getReportedTasks(Long userId){
+        return taskRepository.findByReporterIdOrderByCreatedAtDesc(userId).stream().map(TaskResponse::fromEntity).collect(Collectors.toList());
     }
+
+    @LogExecutionTime
+    public List<TaskResponse> getAssignedTasks(Long userId){
+        return taskRepository.findByAssigneeIdOrderByCreatedAtDesc(userId).stream().map(TaskResponse::fromEntity).collect(Collectors.toList());
+    }
+
     @LogExecutionTime
     public TaskResponse getTaskById(Long taskId, Long userId){
-        Task task = taskRepository.findByIdAndUserId(taskId,userId).orElseThrow(
+        Task task = taskRepository.findByIdAndReporterIdOrAssigneeId(taskId,userId).orElseThrow(
                 ()->new ResourceNotFoundException("Task not found or you don't have permission")
         );
         return TaskResponse.fromEntity(task);
     }
     @LogExecutionTime
     public void deleteTask(Long taskId, Long userId){
-        Task task = taskRepository.findByIdAndUserId(taskId,userId).orElseThrow(
+        Task task = taskRepository.findByIdAndReporterId(taskId,userId).orElseThrow(
                 ()-> new ResourceNotFoundException("Task not found or you don't have permission"));
          taskRepository.deleteById(taskId);
     }
@@ -66,16 +78,30 @@ public class TaskService {
     @LogExecutionTime
     @Transactional
     public TaskResponse updateTask(Long taskId, Long userId, TaskUpdateRequest request){
-        Task task =taskRepository.findByIdAndUserId(taskId,userId).orElseThrow(
-                ()-> new RuntimeException("Task not found or you don't have permission")
+        Task task =taskRepository.findByIdAndReporterIdOrAssigneeId(taskId,userId).orElseThrow(
+                ()-> new ResourceNotFoundException("Task not found or you don't have permission")
         );
         if (request.title() != null && !request.title().isBlank()) task.setTitle(request.title());
         if (request.description() != null) task.setDescription(request.description());
         if (request.dueDate() != null) task.setDueDate(request.dueDate());
         if (request.status() != null) task.setStatus(request.status());
+        if (request.assigneeId() != null) {
+            User assignee = userRepository.findById(request.assigneeId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Assignee user not found"));
+            task.setAssignee(assignee);
+        }
         return TaskResponse.fromEntity(taskRepository.save(task));
 
     }
 
 
+    @LogExecutionTime
+    @Transactional
+    public TaskResponse updateTaskStatus(Long taskId, Long userId, Task.TaskStatus status) {
+        Task task = taskRepository.findByIdAndReporterIdOrAssigneeId(taskId,userId).orElseThrow(
+                ()-> new ResourceNotFoundException("Task not found or you don't have permission")
+        );
+        task.setStatus(status);
+        return TaskResponse.fromEntity(taskRepository.save(task));
+    }
 }

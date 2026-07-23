@@ -37,6 +37,7 @@ class UserRepositoryTests {
         User user = User.builder()
                 .username("mohamed")
                 .email("mohamed@test.com")
+                .password("dummy-encoded-password")
                 .build();
 
         // 2. Action

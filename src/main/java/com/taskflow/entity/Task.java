@@ -25,9 +25,13 @@ public class Task {
 
     private String description;
 
-    @ManyToOne
-    @JoinColumn(name = "user_id", nullable = false)
-    private User user;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporter_id", nullable = false, updatable = false)
+    private User reporter;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assignee_id", nullable = false)
+    private User assignee;
 
     private LocalDateTime dueDate;
 

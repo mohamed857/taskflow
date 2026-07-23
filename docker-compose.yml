@@ -1,0 +1,40 @@
+
+services:
+  # صندوق الداتا بيز
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: taskflow_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 570001
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # صندوق الـ Redis
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+
+  # صندوق التطبيق بتاعنا
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # هنا بنبعت المتغيرات اللي في الـ application.properties
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: taskflow_db
+      DB_USER: postgres
+      DB_PASSWORD: 570001
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+
+volumes:
+  postgres_data:

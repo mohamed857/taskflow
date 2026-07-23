@@ -9,6 +9,7 @@ public record TaskUpdateRequest(
         String title,
         String description,
         LocalDateTime dueDate,
-        Task.TaskStatus status
+        Task.TaskStatus status,
+        Long assigneeId
 ) {
 }

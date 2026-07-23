@@ -22,12 +22,13 @@ public class UserPrincipal implements UserDetails , Serializable {
     public String getEmail(){
         return user.getEmail();
     }
+    public String getRole(){
+        return user.getRole().toString();
+    }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // دلوقتي مش عندنا Roles (صلاحيات)، فهنعطيه صلاحية "USER" افتراضية
-        // في الخطوة الجاية لما نضيف الـ Roles هنعود هنا
-        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        return List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
     }
 
     @Override
